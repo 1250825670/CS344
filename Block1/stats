@@ -1,0 +1,148 @@
+#!/bin/bash
+
+# Author: Daniel Beyer
+# Description: CS344 Program 1 - Stats. Shell script that calculates the mean average and medians from an input file # of numbers.  The script is able to calculate the mean and median across rows and down columns.
+# Date: 01/12/17   
+
+# Create temp files using PID
+tempcolAv="colAv$$"
+tempcolRow="colRow$$"
+tempcolMed="colMed$$"
+tempRow="temprowfile$$"
+
+#Trap temp file cleanup
+
+trap "rm -f *$$; exit 1" INT HUP TERM
+
+# Determine if correct number and format of arguments used
+
+datafilepath="datafile$$"
+if [[ $# == 1 && ( $1 == -r* || $1 == -c* ) ]]  
+then
+	cat > $datafilepath
+
+elif [[ $# == 2 && ( $1 == -r* || $1 == -c* ) ]]
+then
+	datafilepath=$2
+
+else
+	echo "Usage: ./stats {-rows | -cols} [file]" 1>&2
+	exit 1
+fi
+
+# Determine if file exists and is readable
+if [[ ( ! -e $datafilepath ) || ( ! -r $datafilepath ) ]]
+then
+	echo -e "./stats: cannot read $datafilepath" 1>&2
+	exit 1
+fi
+
+#################################################
+# Calculations for rows
+#################################################
+
+if [[ $1 == -r* ]]
+then
+	echo -e "Average\t Median"
+	while read myLine
+		do
+		
+		sum=0
+		count=0
+		numValues=$(echo $myLine | wc -w)	#num of values per row
+		
+		for i in $myLine
+			do
+			sum=$(($sum + $i))	#find sum of nums on each line
+			count=$(($count + 1)) 	#increment count
+			done
+		average=$((($sum + ($numValues / 2)) / $numValues))	#from assignment instructions
+		
+		sortedArr=($(echo $myLine | tr " " "\n" | sort -n )) 	#sort line for median calc
+
+		#If even number of elements, use larger value as median
+		if [[ $(( $numValues % 2 )) == 0 ]] 
+			then
+			median=${sortedArr[ $(( (numValues + 1 ) / 2 )) ]}
+		#If odd number of elements, use middle as median
+			else
+			median=${sortedArr[ $(( $numValues / 2 ))]}
+		fi
+		echo -e "$average\t$median" >> $tempRow
+	done<$datafilepath
+	cat $tempRow
+
+
+######################################################
+# Calculations for columns
+######################################################
+
+elif [[ $1 == -c* ]] 
+then
+
+	itr=1
+	numRows=$(cat $datafilepath | wc -l)	#find number of rows
+	while read myLine
+	do 
+		numValues=$(echo $myLine | wc -w)
+		while [ $itr -le $numValues ]
+		do 
+		cut -f $itr $datafilepath | tr '\n' '\t' >> $tempRow
+		((itr++))	#iterate to next column
+		echo -e '\n' >> $tempRow
+		done	
+	done<$datafilepath
+	cat $tempRow
+
+	#columns added as rows to a temp file
+	#Now repeat the steps for rows to find average and median
+
+	while read myLine 
+		
+		do
+		#Here I had a problem with a new line separating my rows, so this is the workaround
+		if [[ $myLine != "" ]]
+		then
+
+		sum=0
+		count=0
+		numValues=$(echo $myLine | wc -w)
+
+		for i in $myLine
+			do
+			sum=$(($sum + $i))
+			count=$(($count + 1))
+			
+			done
+	
+		average=$((($sum + ($numValues / 2)) / $numValues))
+
+		sortedArr=($(echo $myLine | tr " " "\n" | sort -n ))
+
+		if [[ $(( $numValues % 2 )) == 0 ]]
+			then
+			median=${sortedArr[ $(( (numValues + 1 ) / 2 )) ]}
+			else
+			median=${sortedArr[ $(( $numValues / 2 ))]}
+		fi
+
+		#Add column average to average temp file and column median to median temp file
+		echo $average >> $tempcolAv
+		echo $median >> $tempcolMed
+		fi
+	done<$tempRow
+
+	#I struggled with formatting the output, creating a new temp file was the best solution I could find
+	echo -e "Averages:\n" >$tempcolRow
+	cat $tempcolAv | tr "\n" "\t" >> $tempcolRow
+	echo -e "\n" >> $tempcolRow
+	echo -e "Medians:\n" >> $tempcolRow
+	cat $tempcolMed | tr "\n" "\t" >> $tempcolRow
+	echo -e "\n" >> $tempcolRow
+	cat $tempcolRow 
+
+fi
+
+rm -f *$$		#temp file cleanup
+exit 0 		#End, program ran successfully
+
